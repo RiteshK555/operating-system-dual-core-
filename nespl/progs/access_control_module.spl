@@ -1,0 +1,86 @@
+//access control module
+
+//fn no
+alias function_num R1;
+
+//process table addr
+alias process_table_addr R2;
+process_table_addr = PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16;
+
+//acquire kernel lock
+if(function_num == ACQUIRE_KERN_LOCK)then
+
+  //check core
+  if(CORE == SECONDARY_CORE)then
+
+    //check paging stat or logout stat
+    if(([SYSTEM_STATUS_TABLE + 5] == 1) || ([SYSTEM_STATUS_TABLE + 7] == 1))then
+
+      //set ready
+      [process_table_addr + 4] = ready
+
+      //context switch
+      
+      //multipush
+      multipush(R1, R2);
+
+      //call context switch
+      call CONTEXT_SWTICH;
+
+      //multipop
+      multipop(R1, R2);
+
+    endif;
+
+  endif;
+
+  //kernel is locked
+  while(tsl(ACCESS_LOCK_TABLE) == 1)do
+
+    continue;
+
+  endwhile;
+
+  return;
+
+endif;
+
+//acquire scheduler lock
+if(function_num == ACQUIRE_SCHEDULER_LOCK)then
+
+  //scheduler lock
+  while( tsl(ACCESS_LOCK_TABLE + 1) == 1)do
+
+    continue;
+
+  endwhile;
+
+  return;
+
+endif;
+
+//acquire glock
+if(function_num == ACQUIRE_GLOCK)then
+
+  //glock
+  while( tsl(ACCESS_LOCK_TABLE + 2) == 1)do
+
+    continue;
+
+  endwhile;
+
+  return;
+
+endif;
+
+//release lock
+if(function_num == RELEASE_LOCK)then
+
+  alias access_lock_addr R2;
+
+  //release lock
+  [access_lock_addr] = 0;
+
+  return;
+
+endif;

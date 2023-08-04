@@ -1,0 +1,200 @@
+//context switch module
+
+//acquire scheduler lock
+
+//fn no
+R1 = ACQUIRE_SCHED_LOCK;
+
+call ACCESS_CONTROL;
+
+
+//current process id
+alias currentPID R0;
+currentPID = [SYSTEM_STATUS_TABLE+1];
+
+//push BP because this scheduler may be called from system calls too
+multipush(BP);
+
+//current process table addr
+alias process_table_entry R1;
+process_table_entry = PROCESS_TABLE + currentPID * 16;
+
+//set kernel ptr
+[process_table_entry + 12] = SP % 512;
+
+//set page table base reg
+[process_table_entry + 14] = PTBR;
+
+//set page table len reg
+[process_table_entry + 15] = PTLR;
+
+//change the process
+alias newPID R2;
+newPID = currentPID + 1;
+
+//check core
+if(CORE == PRIMARY_CORE)then
+
+  //paging
+  if([SYSTEM_STATUS_TABLE + 5] != 0)then
+
+    if([PROCESS_TABLE + 15 * 16 + 4] == WAIT_DISK)then
+
+      //idle process
+      newPID = 0;
+
+    else
+
+      //swapper daemon
+      newPID = 15;
+
+    endif;
+
+  else
+
+    while(newPID < MAX_PROC_NUM - 2)do
+
+      if(newPID == [SYSTEM_STATUS_TABLE + 6])then
+
+        newPID = newPID + 1;
+
+        continue;
+
+      endif;
+
+      if((([PROCESS_TABLE + newPID * 16 + 4] == READY) || ([PROCESS_TABLE + newPID * 16 + 4] == CREATED)) && ([PROCESS_TABLE + newPID * 16 + 6] != 1))then
+
+        break;
+
+      endif;
+
+      newPID = newPID + 1; 
+
+    endwhile;
+
+    if(newPID == MAX_PROC_NUM - 2)then
+
+      newPID = 0;
+
+    endif;
+
+  endif;
+
+  //idle 2 process should not be scheduled
+
+  //check logout status and idle 2
+  if(([SYSTEM_STATUS_TABLE + 7] == 1) && ([SYSTEM_STATUS_TABLE + 6] != 14))then
+
+    //schedule idle process till idle 2 is executed
+    newPID = 0;
+
+  endif;
+
+else
+
+  //no idle, init and shell
+  if(newPID ==  MAX_PROC_NUM - 1)then
+
+    newPID = 3;
+
+  endif;
+
+  while(newPID < MAX_PROC_NUM - 1)do
+
+    //not the process running in primary
+    if(newPID == [SYSTEM_STATUS_TABLE + 1])then
+
+      newPID = newPID + 1;
+
+      continue;
+
+    endif;
+
+    if((([PROCESS_TABLE + newPID * 16 + 4] == READY) || ([PROCESS_TABLE + newPID * 16 + 4] == CREATED)) && ([PROCESS_TABLE + newPID * 16 + 6] != 1))then
+
+      break;
+
+    endif;
+    
+
+    newPID = newPID + 1;
+
+  endwhile; 
+
+
+  //set pid of secondary core
+  [SYSTEM_STATUS_TABLE + 6] = newPID;
+
+endif;
+
+//restore the reg values from process table
+alias new_process_table R3;
+new_process_table = PROCESS_TABLE + newPID * 16;
+
+//set back all regs
+SP = [new_process_table + 11] * 512 + [new_process_table+12];
+
+//set page table regs
+PTBR = [new_process_table + 14];
+PTLR = [new_process_table + 15];
+
+//set new pid
+[SYSTEM_STATUS_TABLE+1] = newPID;
+
+
+if([new_process_table + 4] == CREATED) then
+
+  //multipop base ptr
+  //BP = [[new_process_table + 11] * 512];
+  multipop(BP);
+
+  //set new process to running
+  [new_process_table + 4] = RUNNING;
+
+  //set the sp val
+  SP = [new_process_table + 13];
+
+  //set mode flag = 0
+  [new_process_table + 9] = 0;
+
+  //release lock
+
+  //fn no
+  R1 = RELEASE_LOCK;
+
+  //type
+  R3 = ACCESS_LOCK_TABLE + 1;
+
+  //call access control module
+  call ACCESS_CONTROL;
+
+  ireturn;
+
+endif;
+
+
+//set the process to running
+[new_process_table + 4] = RUNNING;
+
+//pop the bp 
+multipop(BP);
+
+//release lock
+
+//fn no
+R1 = RELEASE_LOCK;
+
+//type
+R3 = ACCESS_LOCK_TABLE + 1;
+
+//call access control module
+call ACCESS_CONTROL;
+
+//return
+return;
+
+
+
+
+
+

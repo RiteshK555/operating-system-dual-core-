@@ -1,0 +1,13 @@
+//secondary bootstrap code ( 2nd code )
+
+//set sp
+SP = 8 * 512;
+
+//ptbr
+PTBR = PAGE_TABLE_BASE + 14 * 20;
+
+//ptlr
+PTLR = 10;
+
+
+ireturn;
